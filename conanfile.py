@@ -107,11 +107,14 @@ class QtConan(ConanFile):
         else:
             # Fix issue with sh.exe and cmake on Windows
             # This solution isn't good at all but I cannot find anything else
-            sh_path = which("sh.exe")
-            if sh_path:
-                fpath, _ = os.path.split(sh_path)
-                self.run("ren \"%s\" _sh.exe" % os.path.join(fpath, "sh.exe"))
-
+            #sh_path = which("sh.exe")
+            #if sh_path:
+            #    fpath, _ = os.path.split(sh_path)
+            #    self.run("ren \"%s\" _sh.exe" % os.path.join(fpath, "sh.exe"))
+            
+            # Above does not work for me. Do not know what the problem is
+            pass 
+            
     def build(self):
         """ Define your project building. You decide the way of building it
             to reuse it later in any other project.
@@ -160,6 +163,9 @@ class QtConan(ConanFile):
             if self.settings.compiler.version == "10":
                 env.update({'QMAKESPEC': 'win32-msvc2010'})
                 args += ["-platform win32-msvc2010"]
+                
+        # Unset SHELL variable
+        env.update({'SHELL': ''})
 
         env_build = VisualStudioBuildEnvironment(self)
         env.update(env_build.vars)
@@ -180,7 +186,7 @@ class QtConan(ConanFile):
                 args += ["-openssl-linked"]
 
             self.run("cd %s && %s && set" % (self.source_dir, vcvars))
-            self.run("cd %s && %s && configure %s"
+            self.run("cd %s && %s && cmd /C configure.bat %s"
                      % (self.source_dir, vcvars, " ".join(args)))
             self.run("cd %s && %s && %s %s"
                      % (self.source_dir, vcvars, build_command, " ".join(build_args)))
