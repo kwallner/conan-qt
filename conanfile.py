@@ -56,29 +56,6 @@ class QtConan(ConanFile):
     license = "http://doc.qt.io/qt-5/lgpl.html"
     short_paths = True
 
-    def system_requirements(self):
-        pack_names = None
-        if os_info.linux_distro == "ubuntu":
-            pack_names = ["libgl1-mesa-dev", "libxcb1", "libxcb1-dev",
-                          "libx11-xcb1", "libx11-xcb-dev", "libxcb-keysyms1",
-                          "libxcb-keysyms1-dev", "libxcb-image0", "libxcb-image0-dev",
-                          "libxcb-shm0", "libxcb-shm0-dev", "libxcb-icccm4",
-                          "libxcb-icccm4-dev", "libxcb-sync1", "libxcb-sync-dev",
-                          "libxcb-xfixes0-dev", "libxrender-dev", "libxcb-shape0-dev",
-                          "libxcb-randr0-dev", "libxcb-render-util0", "libxcb-render-util0-dev",
-                          "libxcb-glx0-dev", "libxcb-xinerama0", "libxcb-xinerama0-dev"]
-
-            if self.settings.arch == "x86":
-                full_pack_names = []
-                for pack_name in pack_names:
-                    full_pack_names += [pack_name + ":i386"]
-                pack_names = full_pack_names
-
-        if pack_names:
-            installer = SystemPackageTool()
-            installer.update() # Update the package database
-            installer.install(" ".join(pack_names)) # Install the package
-
     def config_options(self):
         if self.settings.os != "Windows":
             del self.options.opengl
