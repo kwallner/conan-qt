@@ -115,6 +115,10 @@ class QtConan(ConanFile):
             # Above does not work for me. Do not know what the problem is
             pass 
             
+        if self.settings.compiler == "Visual Studio":
+            os.rename("%s/qtbase/configure" % self.source_dir, "%s/qtbase/configure_orig" % self.source_dir)
+            os.rename("%s/configure" % self.source_dir, "%s/configure_orig" % self.source_dir)
+            
     def build(self):
         """ Define your project building. You decide the way of building it
             to reuse it later in any other project.
@@ -166,6 +170,7 @@ class QtConan(ConanFile):
                 
         # Unset SHELL variable
         env.update({'SHELL': ''})
+        env.update({'QMAKESPEC': ''})
 
         env_build = VisualStudioBuildEnvironment(self)
         env.update(env_build.vars)
@@ -186,7 +191,10 @@ class QtConan(ConanFile):
                 args += ["-openssl-linked"]
 
             self.run("cd %s && %s && set" % (self.source_dir, vcvars))
-            self.run("cd %s && %s && cmd /C configure.bat %s"
+            #self.output.info("WILL: cd %s && %s && cmd /C configure.bat %s"
+            #         % (self.source_dir, vcvars, " ".join(args)))
+            #os.system("start cmd /c cmd")                     
+            self.run("cd %s && %s && configure %s"
                      % (self.source_dir, vcvars, " ".join(args)))
             self.run("cd %s && %s && %s %s"
                      % (self.source_dir, vcvars, build_command, " ".join(build_args)))
