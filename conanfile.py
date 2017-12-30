@@ -4,41 +4,20 @@ from distutils.spawn import find_executable
 from conans import AutoToolsBuildEnvironment, ConanFile, tools, VisualStudioBuildEnvironment
 from conans.tools import cpu_count, os_info, SystemPackageTool
 
-def which(program):
-    """
-    Locate a command.
-    """
-    def is_exe(fpath):
-        """
-        Check if a path is executable.
-        """
-        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
-
-    fpath, _ = os.path.split(program)
-    if fpath:
-        if is_exe(program):
-            return program
-    else:
-        for path in os.environ["PATH"].split(os.pathsep):
-            path = path.strip('"')
-            exe_file = os.path.join(path, program)
-            if is_exe(exe_file):
-                return exe_file
-
-    return None
-
 class QtConan(ConanFile):
     """ Qt Conan package """
-
     name = "Qt"
     version = "5.9.3"
+    version = "5.8.0"
     description = "Conan.io package for Qt library."
     source_dir = "qt5"
     settings = "os", "arch", "compiler", "build_type"
     options = {
         "shared": [True, False],
         "opengl": ["desktop", "dynamic"],
+        "activeqt": [True, False],
         "canvas3d": [True, False],
+        "connectivity": [True, False],
         "gamepad": [True, False],
         "graphicaleffects": [True, False],
         "imageformats": [True, False],
@@ -46,15 +25,28 @@ class QtConan(ConanFile):
         "serialport": [True, False],
         "svg": [True, False],
         "tools": [True, False],
+        "translations": [True, False],
         "webengine": [True, False],
         "websockets": [True, False],
         "xmlpatterns": [True, False],
         "openssl": ["no", "yes", "linked"]
     }
-    default_options = "shared=True", "opengl=desktop", "canvas3d=False", "gamepad=False", "graphicaleffects=False", "imageformats=False", "location=False", "serialport=False", "svg=False", "tools=False", "webengine=False", "websockets=False", "xmlpatterns=False", "openssl=no"
-    url = "http://github.com/osechet/conan-qt"
+    default_options = "shared=True", "opengl=desktop", "activeqt=False", "canvas3d=False", "connectivity=False", "gamepad=False", "graphicaleffects=False", "imageformats=False", "location=False", "serialport=False", "svg=False", "tools=False", "translations=False", "webengine=False", "websockets=False", "xmlpatterns=False", "openssl=no"
+    url = "http://github.com/kwallner/conan-qt"
     license = "http://doc.qt.io/qt-5/lgpl.html"
     short_paths = True
+
+    def config_options(self):
+        if self.settings.os != "Windows":
+            del self.options.opengl
+            del self.options.openssl
+
+    def requirements(self):
+        if self.settings.os == "Windows":
+            if self.options.openssl == "yes":
+                self.requires("OpenSSL/1.0.2l@conan/stable", dev=True)
+            elif self.options.openssl == "linked":
+                self.requires("OpenSSL/1.0.2l@conan/stable")
 
     def config_options(self):
         if self.settings.os != "Windows":
@@ -71,8 +63,12 @@ class QtConan(ConanFile):
     def source(self):
         submodules = ["qtbase"]
 
+        if self.options.activeqt:
+            sumodules.append("qtactiveqt")
         if self.options.canvas3d:
             submodules.append("qtcanvas3d")
+        if self.options.connectivity:
+            sumodules.append("qtconnectivity")
         if self.options.gamepad:
             submodules.append("qtgamepad")
         if self.options.graphicaleffects:
@@ -87,6 +83,8 @@ class QtConan(ConanFile):
             submodules.append("qtsvg")
         if self.options.tools:
             submodules.append("qttools")
+        if self.options.translations:
+            sumodules.append("qttranslations")
         if self.options.webengine:
             submodules.append("qtwebengine")
         if self.options.websockets:
@@ -94,13 +92,9 @@ class QtConan(ConanFile):
         if self.options.xmlpatterns:
             submodules.append("qtxmlpatterns")
 
-        major = ".".join(self.version.split(".")[:2])
         self.run("git clone https://code.qt.io/qt/qt5.git")
-        self.run("cd %s && git checkout %s" % (self.source_dir, major))
-        self.run("cd %s && perl init-repository --no-update --module-subset=%s"
-                 % (self.source_dir, ",".join(submodules)))
-        self.run("cd %s && git checkout v%s && git submodule update"
-                 % (self.source_dir, self.version))
+        self.run("cd %s && git checkout v%s" % (self.source_dir, self.version))
+        self.run("cd %s && git submodule update --init %s" % (self.source_dir, " ".join(submodules)))
 
         if self.settings.os != "Windows":
             self.run("chmod +x ./%s/configure" % self.source_dir)
@@ -216,8 +210,7 @@ class QtConan(ConanFile):
                     new_path.append(item)
             os.environ['PATH'] = ';'.join(new_path)
             # end workaround
-            args += ["-developer-build",
-                     "-opengl %s" % self.options.opengl,
+            args += ["-opengl %s" % self.options.opengl,
                      "-platform win32-g++"]
 
             self.output.info("Using '%s' threads" % str(cpu_count()))
