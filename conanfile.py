@@ -34,19 +34,6 @@ class QtConan(ConanFile):
     default_options = "shared=True", "opengl=desktop", "activeqt=False", "canvas3d=False", "connectivity=False", "gamepad=False", "graphicaleffects=False", "imageformats=False", "location=False", "serialport=False", "svg=False", "tools=False", "translations=False", "webengine=False", "websockets=False", "xmlpatterns=False", "openssl=no"
     url = "http://github.com/kwallner/conan-qt"
     license = "http://doc.qt.io/qt-5/lgpl.html"
-    short_paths = True
-
-    def config_options(self):
-        if self.settings.os != "Windows":
-            del self.options.opengl
-            del self.options.openssl
-
-    def requirements(self):
-        if self.settings.os == "Windows":
-            if self.options.openssl == "yes":
-                self.requires("OpenSSL/1.0.2l@conan/stable", dev=True)
-            elif self.options.openssl == "linked":
-                self.requires("OpenSSL/1.0.2l@conan/stable")
 
     def config_options(self):
         if self.settings.os != "Windows":
@@ -96,22 +83,12 @@ class QtConan(ConanFile):
         self.run("cd %s && git checkout v%s" % (self.source_dir, self.version))
         self.run("cd %s && git submodule update --init %s" % (self.source_dir, " ".join(submodules)))
 
-        if self.settings.os != "Windows":
-            self.run("chmod +x ./%s/configure" % self.source_dir)
+        if self.settings.os == "Windows":
+            if self.settings.compiler == "Visual Studio":
+                os.rename("%s/qtbase/configure" % self.source_dir, "%s/qtbase/configure_orig" % self.source_dir)
+                os.rename("%s/configure" % self.source_dir, "%s/configure_orig" % self.source_dir)
         else:
-            # Fix issue with sh.exe and cmake on Windows
-            # This solution isn't good at all but I cannot find anything else
-            #sh_path = which("sh.exe")
-            #if sh_path:
-            #    fpath, _ = os.path.split(sh_path)
-            #    self.run("ren \"%s\" _sh.exe" % os.path.join(fpath, "sh.exe"))
-            
-            # Above does not work for me. Do not know what the problem is
-            pass 
-            
-        if self.settings.compiler == "Visual Studio":
-            os.rename("%s/qtbase/configure" % self.source_dir, "%s/qtbase/configure_orig" % self.source_dir)
-            os.rename("%s/configure" % self.source_dir, "%s/configure_orig" % self.source_dir)
+            self.run("chmod +x ./%s/configure" % self.source_dir)
             
     def build(self):
         """ Define your project building. You decide the way of building it
