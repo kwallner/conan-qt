@@ -2,20 +2,18 @@
 import os
 from distutils.spawn import find_executable
 from conans import AutoToolsBuildEnvironment, ConanFile, tools, VisualStudioBuildEnvironment
-from conans.tools import cpu_count, os_info, SystemPackageTool
+from conans.tools import cpu_count
 
 class QtConan(ConanFile):
     """ Qt Conan package """
     name = "Qt"
     version = "5.9.3"
-    version = "5.8.0"
     description = "Conan.io package for Qt library."
     source_dir = "qt5"
     settings = "os", "arch", "compiler", "build_type"
     options = {
         "shared": [True, False],
-        "opengl": ["desktop", "dynamic"],
-        "activeqt": [True, False],
+        "activeqt": [True, False], # Only supported on windows
         "canvas3d": [True, False],
         "connectivity": [True, False],
         "gamepad": [True, False],
@@ -29,33 +27,69 @@ class QtConan(ConanFile):
         "webengine": [True, False],
         "websockets": [True, False],
         "xmlpatterns": [True, False],
-        "openssl": ["no", "yes", "linked"]
+        # Third party libraries: See http://doc.qt.io/qt-5/configure-options.html
+        "opengl": ["no", "desktop", "dynamic", "es2" ], # FIXME: es2 seems to be the default for windows
+        "openssl": ["no", "runtime", "linked"],
+        "zlib": ["qt", "system" ], # Yet only system is supported
+        "libjpeg": ["qt", "system" ], # Yet only system is supported
+        "libpng": ["qt", "system" ], # Yet only system is supported
+        "xcb": ["qt", "system" ], # Yet only system is supported
+        "xkbcommon": ["qt", "system" ], # Yet only system is supported
+        "freetype": ["qt", "system" ], # Yet only system is supported
+        "pcre": ["qt", "system" ], # Yet only system is supported
+        "harfbuzz": ["qt", "system" ] # Yet only system is supported
     }
-    default_options = "shared=True", "opengl=desktop", "activeqt=False", "canvas3d=False", "connectivity=False", "gamepad=False", "graphicaleffects=False", "imageformats=False", "location=False", "serialport=False", "svg=False", "tools=False", "translations=False", "webengine=False", "websockets=False", "xmlpatterns=False", "openssl=no"
+    default_options = \
+        "shared=True", \
+        "activeqt=False", \
+        "canvas3d=False", \
+        "connectivity=False", \
+        "gamepad=False", \
+        "graphicaleffects=False", \
+        "imageformats=False", \
+        "location=False", \
+        "serialport=False", \
+        "svg=False", \
+        "tools=False", \
+        "translations=False", \
+        "webengine=False", \
+        "websockets=False", \
+        "xmlpatterns=False", \
+        "opengl=desktop", \
+        "openssl=linked", \
+        "zlib=qt", \
+        "libjpeg=qt", \
+        "libpng=qt", \
+        "xcb=qt", \
+        "xkbcommon=qt", \
+        "freetype=qt", \
+        "pcre=qt", \
+        "harfbuzz=qt", 
     url = "http://github.com/kwallner/conan-qt"
     license = "http://doc.qt.io/qt-5/lgpl.html"
+    short_paths = True
+    
 
     def config_options(self):
-        if self.settings.os != "Windows":
-            del self.options.opengl
-            del self.options.openssl
+        #if self.settings.os != "Windows":
+        #    del self.options.opengl
+        #    del self.options.openssl
+        pass
 
     def requirements(self):
-        if self.settings.os == "Windows":
-            if self.options.openssl == "yes":
-                self.requires("OpenSSL/1.0.2l@conan/stable", dev=True)
-            elif self.options.openssl == "linked":
-                self.requires("OpenSSL/1.0.2l@conan/stable")
+        self.output.info("Option for openssl is %s" % self.options.openssl)
+        if self.options.openssl == "linked":
+            self.requires("OpenSSL/1.0.2m@conan/stable")
 
     def source(self):
         submodules = ["qtbase"]
 
         if self.options.activeqt:
-            sumodules.append("qtactiveqt")
+            submodules.append("qtactiveqt")
         if self.options.canvas3d:
             submodules.append("qtcanvas3d")
         if self.options.connectivity:
-            sumodules.append("qtconnectivity")
+            submodules.append("qtconnectivity")
         if self.options.gamepad:
             submodules.append("qtgamepad")
         if self.options.graphicaleffects:
@@ -71,7 +105,7 @@ class QtConan(ConanFile):
         if self.options.tools:
             submodules.append("qttools")
         if self.options.translations:
-            sumodules.append("qttranslations")
+            submodules.append("qttranslations")
         if self.options.webengine:
             submodules.append("qtwebengine")
         if self.options.websockets:
@@ -85,7 +119,9 @@ class QtConan(ConanFile):
 
         if self.settings.os == "Windows":
             if self.settings.compiler == "Visual Studio":
-                os.rename("%s/qtbase/configure" % self.source_dir, "%s/qtbase/configure_orig" % self.source_dir)
+                for subdir in os.listdir(self.source_dir):
+                    if os.path.isfile("%s/%s/configure" % (self.source_dir, subdir)):
+                        os.rename("%s/%s/configure" % (self.source_dir, subdir), "%s/%s/configure_orig" % (self.source_dir, subdir))
                 os.rename("%s/configure" % self.source_dir, "%s/configure_orig" % self.source_dir)
         else:
             self.run("chmod +x ./%s/configure" % self.source_dir)
@@ -94,15 +130,53 @@ class QtConan(ConanFile):
         """ Define your project building. You decide the way of building it
             to reuse it later in any other project.
         """
-        args = ["-opensource", "-confirm-license", "-nomake examples", "-nomake tests",
-                "-prefix %s" % self.package_folder]
-        if not self.options.shared:
-            args.insert(0, "-static")
+        
+        # some useful arguments
+        args = [
+                "-opensource", 
+                "-confirm-license", 
+                "-nomake examples", 
+                "-nomake tests",
+                "-prefix %s" % self.package_folder
+                ]
+        # static/sharedq
+        if self.options.shared:
+            args.append("-shared")
+        else:
+            args.append("-static")
+            
+        # Debug/Release
         if self.settings.build_type == "Debug":
             args.append("-debug")
         else:
             args.append("-release")
 
+        # Add options from requirements
+        for include_dir in self.deps_cpp_info.include_paths:
+            args += ["-I" + include_dir ]
+        for lib_dir in self.deps_cpp_info.lib_paths:
+            args += ["-L" + lib_dir ]
+        for some_define in self.deps_cpp_info.defines:
+            args += ["-D" + some_define ]
+
+        # Partial build options
+        
+        # zlib
+        args += ["-%s-zlib" % self.options.zlib ]
+        
+        # libjpeg
+        args += ["-%s-libjpeg" % self.options.libjpeg ]
+
+        # libpng
+        args += ["-%s-zlib" % self.options.libpng ]
+
+        # freetype
+        args += ["-%s-zlib" % self.options.freetype ]
+
+        # pcre
+        args += ["-%s-zlib" % self.options.pcre ]
+
+        # platform specific
         if self.settings.os == "Windows":
             if self.settings.compiler == "Visual Studio":
                 self._build_msvc(args)
@@ -129,16 +203,19 @@ class QtConan(ConanFile):
             if self.settings.compiler.version == "14":
                 env.update({'QMAKESPEC': 'win32-msvc2015'})
                 args += ["-platform win32-msvc2015"]
-            if self.settings.compiler.version == "12":
+            elif self.settings.compiler.version == "12":
                 env.update({'QMAKESPEC': 'win32-msvc2013'})
                 args += ["-platform win32-msvc2013"]
-            if self.settings.compiler.version == "11":
+            elif self.settings.compiler.version == "11":
                 env.update({'QMAKESPEC': 'win32-msvc2012'})
                 args += ["-platform win32-msvc2012"]
-            if self.settings.compiler.version == "10":
+            elif self.settings.compiler.version == "10":
                 env.update({'QMAKESPEC': 'win32-msvc2010'})
                 args += ["-platform win32-msvc2010"]
-                
+            else:
+                self.output.error("Unsuppoted plattform")
+        
+         
         # Unset SHELL variable
         env.update({'SHELL': ''})
         env.update({'QMAKESPEC': ''})
@@ -154,10 +231,11 @@ class QtConan(ConanFile):
             vcvars = tools.vcvars_command(self.settings)
 
             args += ["-opengl %s" % self.options.opengl]
+            
             if self.options.openssl == "no":
                 args += ["-no-openssl"]
-            elif self.options.openssl == "yes":
-                args += ["-openssl"]
+            elif self.options.openssl == "runtime":
+                args += ["-openssl-runtime"]
             else:
                 args += ["-openssl-linked"]
 
@@ -189,6 +267,13 @@ class QtConan(ConanFile):
             # end workaround
             args += ["-opengl %s" % self.options.opengl,
                      "-platform win32-g++"]
+            
+            if self.options.openssl == "no":
+                args += ["-no-openssl"]
+            elif self.options.openssl == "runtime":
+                args += ["-openssl-runtime"]
+            else:
+                args += ["-openssl-linked"]
 
             self.output.info("Using '%s' threads" % str(cpu_count()))
             self.run("cd %s && configure.bat %s"
@@ -198,15 +283,43 @@ class QtConan(ConanFile):
             self.run("cd %s && mingw32-make install" % (self.source_dir))
 
     def _build_unix(self, args):
+        # platform
         if self.settings.os == "Linux":
-            args += ["-silent", "-xcb"]
-            if self.settings.arch == "x86":
-                args += ["-platform linux-g++-32"]
+            if self.settings.compiler == "gcc":
+                if self.settings.arch == "x86":
+                    args += ["-platform linux-g++-32"]
+                else:
+                    args += ["-platform linux-g++"]
+            else:
+                args += ["-platform linux-clang"]
         else:
-            args += ["-silent", "-no-framework"]
+            args += ["-no-framework"]
             if self.settings.arch == "x86":
                 args += ["-platform macx-clang-32"]
+          
+        # openssl
+        if self.options.openssl == "no":
+            args += ["-no-openssl"]
+        else:
+            if self.options.openssl == "runtime":
+                args += ["-openssl-runtime"]
+            else:
+                args += ["-openssl-linked"]
+            ssl_libs= []
+            ssl_libs.append("-lssl")
+            ssl_libs.append("-lcrypto")
+            ssl_libs.append("-ldl")
+            os.environ['OPENSSL_LIBS'] = " ".join(ssl_libs) 
+            
+        # xcb
+        args += ["-%s-zlib" % self.options.xcb ]
 
+        # xkbcommon
+        args += ["-%s-zlib" % self.options.xkbcommon ]
+
+        # harfbuzz
+        args += ["-%s-zlib" % self.options.harfbuzz ]
+                       
         self.output.info("Using '%s' threads" % str(cpu_count()))
         self.run("cd %s && ./configure %s" % (self.source_dir, " ".join(args)))
         self.run("cd %s && make -j %s" % (self.source_dir, str(cpu_count())))
