@@ -30,14 +30,14 @@ class QtConan(ConanFile):
         # Third party libraries: See http://doc.qt.io/qt-5/configure-options.html
         "opengl": ["no", "desktop", "dynamic", "es2" ], # FIXME: es2 seems to be the default for windows
         "openssl": ["no", "runtime", "linked"],
-        "zlib": ["qt", "system" ], # Yet only system is supported
-        "libjpeg": ["qt", "system" ], # Yet only system is supported
-        "libpng": ["qt", "system" ], # Yet only system is supported
-        "xcb": ["qt", "system" ], # Yet only system is supported
-        "xkbcommon": ["qt", "system" ], # Yet only system is supported
-        "freetype": ["qt", "system" ], # Yet only system is supported
-        "pcre": ["qt", "system" ], # Yet only system is supported
-        "harfbuzz": ["qt", "system" ] # Yet only system is supported
+        "zlib": ["system", "qt" ], # Yet only qt is supported
+        "libjpeg": ["system", "qt" ], # Yet only qt is supported
+        "libpng": ["system", "qt" ], # Yet only qt is supported
+        "xcb": ["system", "qt" ], # Yet only qt is supported
+        "xkbcommon": ["system", "qt" ], # Yet only qt is supported
+        "freetype": ["system", "qt" ], # Yet only qt is supported
+        "pcre": ["system", "qt" ], # Yet only qt is supported
+        "harfbuzz": ["system", "qt" ] # Yet only qt is supported
     }
     default_options = \
         "shared=True", \
@@ -80,7 +80,12 @@ class QtConan(ConanFile):
         self.output.info("Option for openssl is %s" % self.options.openssl)
         if self.options.openssl == "linked":
             self.requires("OpenSSL/1.0.2m@conan/stable")
-
+            
+            # Does not work: zlib must be named differently ... zdll.lib (see configure.json)
+            # OpenSSL include already zlib .. so use it
+            #self.requires("zlib/1.2.11@conan/stable")
+            #self.options.zlib = "system"
+            
     def source(self):
         submodules = ["qtbase"]
 
@@ -192,41 +197,31 @@ class QtConan(ConanFile):
         else:
             build_command = "nmake.exe"
             build_args = []
-        self.output.info("Using '%s %s' to build" % (build_command, " ".join(build_args)))
 
         env = {}
         env.update({'PATH': ['%s/qtbase/bin' % self.conanfile_directory,
                              '%s/gnuwin32/bin' % self.conanfile_directory,
                              '%s/qtrepotools/bin' % self.conanfile_directory]})
-        # it seems not enough to set the vcvars for older versions
-        if self.settings.compiler == "Visual Studio":
-            if self.settings.compiler.version == "14":
-                env.update({'QMAKESPEC': 'win32-msvc2015'})
-                args += ["-platform win32-msvc2015"]
-            elif self.settings.compiler.version == "12":
-                env.update({'QMAKESPEC': 'win32-msvc2013'})
-                args += ["-platform win32-msvc2013"]
-            elif self.settings.compiler.version == "11":
-                env.update({'QMAKESPEC': 'win32-msvc2012'})
-                args += ["-platform win32-msvc2012"]
-            elif self.settings.compiler.version == "10":
-                env.update({'QMAKESPEC': 'win32-msvc2010'})
-                args += ["-platform win32-msvc2010"]
-            else:
-                self.output.error("Unsuppoted plattform")
-        
-         
-        # Unset SHELL variable
+        # Just to get save remove this
         env.update({'SHELL': ''})
         env.update({'QMAKESPEC': ''})
+       
+        args += ["-platform win32-msvc"]
+        
+         
 
         env_build = VisualStudioBuildEnvironment(self)
         env.update(env_build.vars)
-
+        
+        if self.options.zlib == "system":
+            env.update({'_LIBS': '-lzlib'})
+            env.update({'OPENSSL_LIBS': '-lzlib'}) # Just to test
+            
         # Workaround for conan-io/conan#1408
-        for name, value in env.items():
-            if not value:
-                del env[name]
+        #for name, value in env.items():
+        #    if not value:
+        #        del env[name]
+        
         with tools.environment_append(env):
             vcvars = tools.vcvars_command(self.settings)
 
@@ -240,10 +235,7 @@ class QtConan(ConanFile):
                 args += ["-openssl-linked"]
 
             self.run("cd %s && %s && set" % (self.source_dir, vcvars))
-            #self.output.info("WILL: cd %s && %s && cmd /C configure.bat %s"
-            #         % (self.source_dir, vcvars, " ".join(args)))
-            #os.system("start cmd /c cmd")                     
-            self.run("cd %s && %s && configure %s"
+            self.run("cd %s && %s && cmd /C configure.bat %s"
                      % (self.source_dir, vcvars, " ".join(args)))
             self.run("cd %s && %s && %s %s"
                      % (self.source_dir, vcvars, build_command, " ".join(build_args)))
@@ -312,13 +304,13 @@ class QtConan(ConanFile):
             os.environ['OPENSSL_LIBS'] = " ".join(ssl_libs) 
             
         # xcb
-        args += ["-%s-zlib" % self.options.xcb ]
+        args += ["-%s-xcb" % self.options.xcb ]
 
         # xkbcommon
-        args += ["-%s-zlib" % self.options.xkbcommon ]
+        args += ["-%s-xkbcommon" % self.options.xkbcommon ]
 
         # harfbuzz
-        args += ["-%s-zlib" % self.options.harfbuzz ]
+        args += ["-%s-harfbuzz" % self.options.harfbuzz ]
                        
         self.output.info("Using '%s' threads" % str(cpu_count()))
         self.run("cd %s && ./configure %s" % (self.source_dir, " ".join(args)))
